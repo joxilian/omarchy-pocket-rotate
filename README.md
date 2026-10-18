@@ -1,6 +1,8 @@
+
 # Omarchy Pocket Rotate
 
 Omarchy Pocket Rotate aims to make switching between normal and 180-degree orientations simple and convenient on the GPD Pocket 3 running Omarchy Linux, Hyprland, and Quickshell.
+<img width="2048" height="768" alt="Omarchy Rotate_ GPD Pocket 3" src="https://github.com/user-attachments/assets/f1874c1f-6699-4a53-a0a5-3a7d64695114" />
 
 ## Features
 
