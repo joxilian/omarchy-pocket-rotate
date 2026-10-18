@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pocket-rotate"
+STATE_FILE="$STATE_DIR/rotated"
+MONITORS_FILE="${POCKET_ROTATE_MONITORS_FILE:-$HOME/.config/hypr/monitors.lua}"
+OUTPUT="${POCKET_ROTATE_OUTPUT:-DSI-1}"
+
+mkdir -p "$STATE_DIR"
+
+get_transform() {
+  if [[ ! -f "$MONITORS_FILE" ]]; then
+    echo "Cannot find monitor config: $MONITORS_FILE" >&2
+    return 1
+  fi
+  # Read the transform associated with the configured output's block/line.
+  awk -v output="$OUTPUT" '
+    index($0, output) { found=1 }
+    found && match($0, /transform[[:space:]]*=[[:space:]]*[0-9]+/) {
+      value=substr($0, RSTART, RLENGTH); sub(/.*=/, "", value); gsub(/[[:space:]]/, "", value); print value; exit
+    }
+    found && /\)/ { found=0 }
+  ' "$MONITORS_FILE"
+}
+
+show_status() {
+  if [[ -f "$STATE_FILE" ]]; then
+    echo "180° toggle state: active (state marker)"
+  else
+    echo "180° toggle state: inactive (state marker)"
+  fi
+  echo "Configured output: $OUTPUT"
+  echo "Monitor config: $MONITORS_FILE"
+  echo "Configured transform: $(get_transform || echo unknown)"
+}
+
+case "${1:-toggle}" in
+  status) show_status ;;
+  toggle)
+    if [[ ! -f "$MONITORS_FILE" ]]; then
+      echo "Missing $MONITORS_FILE" >&2; exit 1
+    fi
+    current="$(get_transform || true)"
+    if [[ "$current" == "3" ]]; then
+      target=1
+      touch "$STATE_FILE"
+    elif [[ "$current" == "1" ]]; then
+      target=3
+      rm -f "$STATE_FILE"
+    else
+      echo "Expected transform 1 or 3 for $OUTPUT, found '${current:-none}'. No changes made." >&2
+      echo "Set POCKET_ROTATE_MONITORS_FILE or POCKET_ROTATE_OUTPUT if your config differs." >&2
+      exit 2
+    fi
+    # Make a backup before changing the user's monitor config.
+    cp -a "$MONITORS_FILE" "$MONITORS_FILE.pocket-rotate.bak"
+    python - "$MONITORS_FILE" "$OUTPUT" "$target" <<'PY'
+import re, sys
+path, output, target = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, encoding='utf-8') as f: text = f.read()
+# Restrict the replacement to the monitor configuration expression containing this output.
+lines = text.splitlines(True)
+found = False
+for i, line in enumerate(lines):
+    if output in line:
+        found = True
+        # In common Omarchy config, output and transform are on the same hl.monitor(...) line.
+        if re.search(r'transform\s*=\s*\d+', line):
+            lines[i] = re.sub(r'(transform\s*=\s*)\d+', r'\g<1>' + target, line, count=1)
+            break
+        # Handle multi-line monitor expressions until their closing parenthesis.
+        for j in range(i + 1, min(len(lines), i + 20)):
+            if re.search(r'transform\s*=\s*\d+', lines[j]):
+                lines[j] = re.sub(r'(transform\s*=\s*)\d+', r'\g<1>' + target, lines[j], count=1)
+                break
+            if ')' in lines[j]: break
+        else:
+            raise SystemExit('Could not find transform in the monitor expression; no change made.')
+        break
+if not found:
+    raise SystemExit(f'Could not find output {output!r}; no change made.')
+with open(path, 'w', encoding='utf-8') as f: f.writelines(lines)
+PY
+    if command -v hyprctl >/dev/null 2>&1; then
+      if hyprctl reload >/dev/null 2>&1; then
+        echo "Display config changed to transform=$target and Hyprland reload requested."
+      else
+        echo "Config changed to transform=$target, but hyprctl reload failed. Log out/in or reload Hyprland manually." >&2
+      fi
+    else
+      echo "Config changed to transform=$target. Reload Hyprland manually to apply it." 
+    fi
+    echo "NOTE: This version does not change the live touchscreen calibration matrix." >&2
+    ;;
+  *) echo "Usage: pocket-rotate [toggle|status]" >&2; exit 2 ;;
+esac
