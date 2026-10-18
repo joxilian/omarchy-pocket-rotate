@@ -1,12 +1,5 @@
 # Omarchy Pocket Rotate
 
-git init
-git add .
-git commit -m "Initial release: Omarchy Pocket Rotate"
-git branch -M main
-git remote add origin [https://github.com/DEIN-USERNAME/omarchy-pocket-rotate.git](https://github.com/DEIN-USERNAME/omarchy-pocket-rotate.git)
-git push -u origin main
-
 Omarchy Pocket Rotate aims to make switching between normal and 180-degree orientations simple and convenient on the GPD Pocket 3 running Omarchy Linux, Hyprland, and Quickshell.
 
 ## Features
